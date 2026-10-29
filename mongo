@@ -1,0 +1,141 @@
+index.html
+
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>Student CRUD</h2>
+
+<input id="name" placeholder="Name">
+<input id="marks" type="number" placeholder="Marks">
+
+<button onclick="addStudent()">Add</button>
+<button onclick="loadStudents()">View</button>
+
+<p id="message"></p>
+<div id="result"></div>
+
+<script>
+async function addStudent() {
+    try {
+        let name = document.getElementById("name").value;
+        let marks = document.getElementById("marks").value;
+
+        let r = await fetch("/add", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name, marks: Number(marks)})
+        });
+
+        document.getElementById("message").innerText = await r.text();
+        loadStudents();
+    } catch (e) {
+        document.getElementById("message").innerText = e.message;
+    }
+}
+
+async function loadStudents() {
+    try {
+        let r = await fetch("/view");
+        if (!r.ok) throw new Error("Cannot load students");
+
+        let data = await r.json();
+
+        document.getElementById("result").innerHTML = data.map(s =>
+            `<p>${s.name} - ${s.marks}
+            <button onclick="editStudent('${s._id}')">Edit</button>
+            <button onclick="deleteStudent('${s._id}')">Delete</button>
+            </p>`
+        ).join("") || "No students found";
+    } catch (e) {
+        document.getElementById("message").innerText = e.message;
+    }
+}
+
+async function editStudent(id) {
+    let name = prompt("Enter new name");
+    if (name === null) return;
+
+    let marks = prompt("Enter new marks");
+    if (marks === null || marks.trim() === "" || isNaN(marks)) return;
+
+    try {
+        let r = await fetch("/edit/" + id, {
+            method: "PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name, marks: Number(marks)})
+        });
+
+        document.getElementById("message").innerText = await r.text();
+        loadStudents();
+    } catch (e) {
+        document.getElementById("message").innerText = e.message;
+    }
+}
+
+async function deleteStudent(id) {
+    try {
+        let r = await fetch("/delete/" + id, {
+            method: "DELETE"
+        });
+
+        document.getElementById("message").innerText = await r.text();
+        loadStudents();
+    } catch (e) {
+        document.getElementById("message").innerText = e.message;
+    }
+}
+
+loadStudents();
+</script>
+
+</body>
+</html>
+
+
+
+Server.js
+const express = require("express");
+const { MongoClient, ObjectId } = require("mongodb");
+
+const app = express();
+app.use(express.json());
+app.use(express.static(__dirname));
+
+async function start() {
+    const client = new MongoClient("mongodb://127.0.0.1:27017");
+    await client.connect();
+
+    console.log("MongoDB Connected");
+
+    const db = client.db("college");
+    const students = db.collection("students");
+
+    app.post("/add", async (req, res) => {
+        await students.insertOne(req.body);
+        res.send("Added successfully");
+    });
+
+    app.get("/view", async (req, res) => {
+        res.json(await students.find().toArray());
+    });
+
+    app.put("/edit/:id", async (req, res) => {
+        await students.updateOne(
+            { _id: new ObjectId(req.params.id) },
+            { $set: req.body }
+        );
+        res.send("Updated successfully");
+    });
+
+    app.delete("/delete/:id", async (req, res) => {
+        await students.deleteOne({
+            _id: new ObjectId(req.params.id)
+        });
+        res.send("Deleted successfully");
+    });
+
+    app.listen(3000, () => console.log("Server running"));
+}
+
+start().catch(console.error);
