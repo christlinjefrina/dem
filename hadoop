@@ -1,0 +1,77 @@
+Payroll.java
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.*;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class Payroll {
+    public static void main(String[] args) throws Exception {
+        Job job = Job.getInstance(new Configuration(), "Payroll");
+        job.setJarByClass(Payroll.class);
+        job.setMapperClass(PayrollMapper.class);
+        job.setReducerClass(PayrollReducer.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+}
+
+
+
+
+PayrollMapper.java
+
+import java.io.IOException;
+import org.apache.hadoop.io.;
+import org.apache.hadoop.mapreduce.;
+public class PayrollMapper extends Mapper<Object, Text, Text, IntWritable> {
+public void map(Object key, Text value, Context context)
+throws IOException, InterruptedException {
+String[] data = value.toString().split(",");
+context.write(new Text(data[2]), new IntWritable(Integer.parseInt(data[3])));
+}
+}
+
+
+PayrollReducer.java
+import java.io.IOException;
+import org.apache.hadoop.io.;
+import org.apache.hadoop.mapreduce.;
+public class PayrollReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+public void reduce(Text key, Iterable<IntWritable> values, Context context)
+throws IOException, InterruptedException {
+int total = 0;
+for (IntWritable value : values) {
+total += value.get();
+}
+context.write(key, new IntWritable(total));
+}
+}
+
+
+
+
+Employees.csv
+1,John Doe,Engineering,5000
+2,Jane Smith,HR,4000
+3,Tom Brown,Engineering,5500
+4,Alice White,HR,4500
+5,David Black,Sales,6000
+6,Emily Green,Sales,6500
+
+
+
+mkdir classes
+
+javac -classpath "$(hadoop classpath)" -d classes PayrollMapper.java PayrollReducer.java Payroll.java
+
+jar -cvf payroll.jar -C classes .
+hdfs dfs -mkdir -p /input
+hdfs dfs -put employees.csv /input/
+hadoop jar payroll.jar Payroll /input/employees.csv /output
+hdfs dfs -cat /output/part-r-00000
